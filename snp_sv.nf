@@ -19,8 +19,8 @@ summary_file = file(params.sequencing_summary)
 genome_file = file(params.genome)
 
 
-process pycoqc {
-    container 'tleonardi/pycoqc:2.5.2'
+process qc {
+    
     publishDir "${params.outdir}/pycoqc", mode: 'copy'
     input:
     file summary_file
@@ -46,7 +46,7 @@ process fastq_cat {
 
 }
 process minimap2 {
-    container 'nanozoo/minimap2:2.24--82ff7f3'
+    
     memory '30 GB'
 
     input:
@@ -61,7 +61,7 @@ process minimap2 {
     """
 }
 process sort_bam {
-    container 'zavolab/samtools:1.10'
+    
     memory '30 GB'
     input:
     file bam from bam_ch
@@ -73,7 +73,7 @@ process sort_bam {
     samtools index  sorted.bam
     """
 }
-process pepper {
+process snp {
     input:
     tuple file(bam), file(bai) from sorted_bam_ch
     file genome
@@ -82,7 +82,7 @@ process pepper {
     script:
     """
     mkdir output
-    run_pepper_margin_deepvariant call_variant \
+     call_variant \
     -b $bam \
     -f ${genome} \
     -o output/ \
