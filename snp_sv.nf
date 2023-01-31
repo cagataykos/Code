@@ -1,52 +1,45 @@
 #!/usr/bin/env nextflow
 
-//Add file
-params.outdir = "results"
-params.fastq_file_path = "/*.fastq.gz"
-params.genome = ""
-params.sequencing_summary=""
-params.tandem_repeats_bed = ""
-
-
-//Add paramaters of tools
-
-params.ont_r10_q20 = ""
-params.ont_alignment = ""
-
 // Files
+params.sequencing  = "/pass"
+params.genome = "/home"
+params.seq_summary = "/seq_summary"
+params.outdir = "results"
 
-summary_file = file(params.sequencing_summary)
-genome_file = file(params.genome)
+
+genome = file(params.genome)
+summary = file(params.seq_summary)
 
 
-process qc {
-    
-    publishDir "${params.outdir}/pycoqc", mode: 'copy'
+process pycoqc {
+    container 'test/qc:2.5.2'
+    memory '30 GB'
+    publishDir "${params.outdir}/pycoqc", mode: 'copy', overwrite: true
+
     input:
-    file summary_file
+    file summary
+
     output:
-    tuple file("*.html"), file("*.json")
+    tuple file('pycoqc.html'), file('pycoqc.json') into pycoqc_ch
+
     script:
     """
-    pycoQC -f ${summary} -o pycoqc.html -j pycoqc.json
+    qc -f ${summary} -o pycoqc.html -j pycoqc.json
     """
-
 }
-
-process fastq_cat {
-
+process merge_fastq {
+    memory '30 GB'
     input:
-    path fastq_file_path
+    path reads from params.sequencing
     output:
-    file "merged.fastq.gz" into merged_fastq
+    file("merged_fastq_GM24385_Q20.fastq.gz") into merged_fastq_ch
     script:
     """
-    cat ${fastq_file_path} > merged.fastq.gz"
+    cat ${reads}/*.gz > merged_fastq_GM24385_Q20.fastq.gz
     """
-
 }
 process minimap2 {
-    
+    container 'test/minimap2:2.24--82ff7f3'
     memory '30 GB'
 
     input:
@@ -61,7 +54,7 @@ process minimap2 {
     """
 }
 process sort_bam {
-    
+    container 'test/samtools:1.10'
     memory '30 GB'
     input:
     file bam from bam_ch
@@ -73,34 +66,38 @@ process sort_bam {
     samtools index  sorted.bam
     """
 }
-process snp {
+process pepper {
+    container "test/snp:0.8"
     input:
     tuple file(bam), file(bai) from sorted_bam_ch
     file genome
     output:
-    path
+    file "vcf.gz*" into annotation_channel
     script:
     """
     mkdir output
-     call_variant \
+    run_pepper_margin_deepvariant call_variant \
     -b $bam \
-    -f ${genome} \
+    -f $genome \
     -o output/ \
     -t 8 \
     --ont_r10_q20
     """
+
+
 }
 process sv_call {
     publishDir "${params.outdir}/Structural_V", mode: 'copy', overwrite: true
+    container "cbkos/sv:2.2"
     memory '30 GB'
     input:
     tuple file(bam), file(bai) from sorted_bam_ch_2
     file genome
     file tandem_repeats_bed
     output:
-
+    file "vcf.gz*" into sv_annotation_channel
     script:
     """
-    sniffles --input $bam --reference ${genome} --vcf sv.vcf --tandem_repeats_bed ${tandem_repeats_bed} --threads 4
+    sv tool command
     """
 }
